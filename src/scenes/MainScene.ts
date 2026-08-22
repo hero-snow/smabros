@@ -1,27 +1,42 @@
 import Phaser from 'phaser';
 import { Player } from '../entities/Player';
 
+type GameState = 'TITLE' | 'COUNTDOWN' | 'PLAYING' | 'GAMEOVER';
+
 export class MainScene extends Phaser.Scene {
+  private gameState: GameState = 'TITLE';
+
   private player!: Player;
   private cpu!: Player;
   private mainStage!: Phaser.GameObjects.Rectangle;
   private leftPlatform!: Phaser.GameObjects.Rectangle;
   private rightPlatform!: Phaser.GameObjects.Rectangle;
+  private topPlatform!: Phaser.GameObjects.Rectangle;
 
+  // Keyboard keys
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
-  private attackKey!: Phaser.Input.Keyboard.Key;
-  private smashKey!: Phaser.Input.Keyboard.Key;
+  private keyA!: Phaser.Input.Keyboard.Key;
+  private keyD!: Phaser.Input.Keyboard.Key;
+  private keyW!: Phaser.Input.Keyboard.Key;
+  private keyZ!: Phaser.Input.Keyboard.Key;
+  private keyX!: Phaser.Input.Keyboard.Key;
+  private keyJ!: Phaser.Input.Keyboard.Key;
+  private keyK!: Phaser.Input.Keyboard.Key;
+  private keySpace!: Phaser.Input.Keyboard.Key;
 
   // HUD Elements
+  private hudContainer!: Phaser.GameObjects.Container;
   private playerDamageText!: Phaser.GameObjects.Text;
   private cpuDamageText!: Phaser.GameObjects.Text;
   private playerStockText!: Phaser.GameObjects.Text;
   private cpuStockText!: Phaser.GameObjects.Text;
 
+  // Title & Overlay Containers
+  private titleContainer!: Phaser.GameObjects.Container;
+  private countdownText!: Phaser.GameObjects.Text;
   private gameOverContainer!: Phaser.GameObjects.Container;
-  private isGameOver: boolean = false;
 
-  // Attack cooldowns
+  // Attack cooldown flags
   private playerAttacking: boolean = false;
   private cpuAttacking: boolean = false;
 
@@ -34,121 +49,298 @@ export class MainScene extends Phaser.Scene {
   }
 
   create(): void {
-    this.isGameOver = false;
+    this.gameState = 'TITLE';
     this.playerAttacking = false;
     this.cpuAttacking = false;
 
     // Enable multi-touch for mobile
     this.input.addPointer(3);
 
-    // Dynamic Space / Stage Background
-    this.cameras.main.setBackgroundColor('#0b0f19');
-    this.add.grid(400, 300, 800, 600, 40, 40, 0x1e293b, 0.3, 0x334155, 0.5);
+    // 1. Wide Battlefield Background (960x600)
+    this.cameras.main.setBackgroundColor('#090d16');
+    this.add.grid(480, 300, 960, 600, 48, 48, 0x1e293b, 0.25, 0x334155, 0.45);
 
-    // Decorative background sun/ring
-    this.add.circle(400, 260, 200, 0x38bdf8, 0.04);
-    this.add.circle(400, 260, 120, 0x818cf8, 0.08);
+    // Atmospheric nebulae/circles
+    this.add.circle(480, 270, 260, 0x38bdf8, 0.04);
+    this.add.circle(480, 270, 160, 0x818cf8, 0.07);
 
-    // 1. Floating Main Stage Platform (400x24 px at Center)
-    const stageX = 400;
-    const stageY = 440;
-    const stageW = 420;
-    const stageH = 24;
+    // 2. Wide Main Floating Stage (Width: 580px, Center: 480, Height: 28px)
+    const stageX = 480;
+    const stageY = 460;
+    const stageW = 580;
+    const stageH = 28;
 
-    this.mainStage = this.add.rectangle(stageX, stageY, stageW, stageH, 0x3b82f6);
+    this.mainStage = this.add.rectangle(stageX, stageY, stageW, stageH, 0x2563eb);
     this.mainStage.setStrokeStyle(3, 0x60a5fa);
     this.physics.add.existing(this.mainStage, true);
     (this.mainStage.body as Phaser.Physics.Arcade.StaticBody).updateFromGameObject();
 
-    // Stage decorative bottom detail
-    this.add.polygon(stageX, stageY + 25, [
-      -stageW / 2 + 20, 0,
-      stageW / 2 - 20, 0,
-      stageW / 2 - 80, 50,
-      -stageW / 2 + 80, 50
-    ], 0x1e3a8a, 0.9);
+    // Stage decorative high-tech underside
+    this.add.polygon(stageX, stageY + 28, [
+      -stageW / 2 + 30, 0,
+      stageW / 2 - 30, 0,
+      stageW / 2 - 120, 65,
+      -stageW / 2 + 120, 65
+    ], 0x1e3a8a, 0.95);
 
-    // 2. Side Passing Platforms (Left & Right)
-    this.leftPlatform = this.add.rectangle(240, 330, 130, 10, 0x38bdf8, 0.85);
+    // 3. Three Battlefield Soft Platforms (Left, Right, Top)
+    // Left platform
+    this.leftPlatform = this.add.rectangle(310, 340, 150, 12, 0x38bdf8, 0.9);
     this.leftPlatform.setStrokeStyle(2, 0x7dd3fc);
     this.physics.add.existing(this.leftPlatform, true);
     (this.leftPlatform.body as Phaser.Physics.Arcade.StaticBody).updateFromGameObject();
 
-    this.rightPlatform = this.add.rectangle(560, 330, 130, 10, 0x38bdf8, 0.85);
+    // Right platform
+    this.rightPlatform = this.add.rectangle(650, 340, 150, 12, 0x38bdf8, 0.9);
     this.rightPlatform.setStrokeStyle(2, 0x7dd3fc);
     this.physics.add.existing(this.rightPlatform, true);
     (this.rightPlatform.body as Phaser.Physics.Arcade.StaticBody).updateFromGameObject();
 
-    // Create Player 1 (Blue Hero)
-    this.player = new Player(this, 300, 350, 'player_tex', 'player');
-    this.physics.add.collider(this.player, this.mainStage);
-    this.physics.add.collider(this.player, this.leftPlatform);
-    this.physics.add.collider(this.player, this.rightPlatform);
+    // Top Center platform
+    this.topPlatform = this.add.rectangle(480, 220, 150, 12, 0x38bdf8, 0.9);
+    this.topPlatform.setStrokeStyle(2, 0x7dd3fc);
+    this.physics.add.existing(this.topPlatform, true);
+    (this.topPlatform.body as Phaser.Physics.Arcade.StaticBody).updateFromGameObject();
 
-    // Create CPU Opponent (Red/Orange Fighter)
-    this.cpu = new Player(this, 500, 350, 'dummy_tex', 'cpu');
-    this.physics.add.collider(this.cpu, this.mainStage);
-    this.physics.add.collider(this.cpu, this.leftPlatform);
-    this.physics.add.collider(this.cpu, this.rightPlatform);
+    // 4. Create Player & CPU Fighters
+    this.player = new Player(this, 350, 380, 'player_tex', 'player');
+    this.cpu = new Player(this, 610, 380, 'dummy_tex', 'cpu');
 
-    // Collide player and cpu
+    // Physics Collisions with Platforms
+    const platforms = [this.mainStage, this.leftPlatform, this.rightPlatform, this.topPlatform];
+    this.physics.add.collider(this.player, platforms);
+    this.physics.add.collider(this.cpu, platforms);
     this.physics.add.collider(this.player, this.cpu);
 
-    // Setup HUD UI
+    // Freeze both fighters initially
+    this.player.isFrozen = true;
+    this.cpu.isFrozen = true;
+
+    // 5. Setup UI & Controls
     this.createHUD();
-
-    // Virtual Touch Controls (Mobile Friendly)
     this.createVirtualControls();
+    this.setupKeyboardInput();
 
-    // Keyboard controls
+    // 6. Countdown Display Object (Hidden at start)
+    this.countdownText = this.add.text(480, 280, '', {
+      fontSize: '72px',
+      color: '#facc15',
+      fontStyle: 'bold',
+      stroke: '#000000',
+      strokeThickness: 8
+    }).setOrigin(0.5).setAlpha(0);
+
+    // 7. Show Title Screen
+    this.createTitleScreen();
+  }
+
+  private setupKeyboardInput(): void {
     if (this.input.keyboard) {
       this.cursors = this.input.keyboard.createCursorKeys();
-      this.attackKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.Z);
-      this.smashKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.X);
+      this.keyA = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A);
+      this.keyD = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D);
+      this.keyW = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.W);
+      this.keyZ = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.Z);
+      this.keyX = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.X);
+      this.keyJ = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.J);
+      this.keyK = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.K);
+      this.keySpace = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
     }
   }
 
   update(_time: number, delta: number): void {
-    if (this.isGameOver) return;
+    if (this.gameState === 'TITLE') {
+      // Allow starting via Space on title screen
+      if (this.keySpace && Phaser.Input.Keyboard.JustDown(this.keySpace)) {
+        this.startCountdown();
+      }
+      return;
+    }
 
-    // Update Player & CPU Physics logic
+    if (this.gameState === 'GAMEOVER') return;
+
+    // Update Player & CPU
     this.player.updatePlayer(delta, this.cpu);
     this.cpu.updatePlayer(delta, this.player);
 
-    // Handle Player Keyboard Controls
-    if (this.cursors) {
-      this.player.moveLeftInput = this.cursors.left.isDown;
-      this.player.moveRightInput = this.cursors.right.isDown;
+    if (this.gameState === 'PLAYING') {
+      // Keyboard input handling (Arrow keys + WASD)
+      this.handlePlayerControls();
 
-      if (Phaser.Input.Keyboard.JustDown(this.cursors.up) || Phaser.Input.Keyboard.JustDown(this.cursors.space)) {
-        this.player.jump();
+      // CPU AI Attack handling
+      if (this.cpu.cpuWantsAttack && !this.cpuAttacking) {
+        const isSmash = Phaser.Math.Between(0, 100) < 35;
+        this.executeAttack(this.cpu, this.player, isSmash);
       }
 
-      if (this.attackKey && Phaser.Input.Keyboard.JustDown(this.attackKey)) {
-        this.executeAttack(this.player, this.cpu, false);
-      }
+      // Check Out-of-bounds Knockout (Blast Zone)
+      this.checkBlastZone(this.player, 350, 200);
+      this.checkBlastZone(this.cpu, 610, 200);
 
-      if (this.smashKey && Phaser.Input.Keyboard.JustDown(this.smashKey)) {
-        this.executeAttack(this.player, this.cpu, true);
-      }
+      // Update HUD
+      this.updateHUD();
+    }
+  }
+
+  private handlePlayerControls(): void {
+    const isLeft = (this.cursors && this.cursors.left.isDown) || (this.keyA && this.keyA.isDown);
+    const isRight = (this.cursors && this.cursors.right.isDown) || (this.keyD && this.keyD.isDown);
+
+    this.player.moveLeftInput = isLeft;
+    this.player.moveRightInput = isRight;
+
+    // Jump (Up / Space / W)
+    const jumpPressed = (this.cursors && Phaser.Input.Keyboard.JustDown(this.cursors.up)) ||
+                        (this.keySpace && Phaser.Input.Keyboard.JustDown(this.keySpace)) ||
+                        (this.keyW && Phaser.Input.Keyboard.JustDown(this.keyW));
+
+    if (jumpPressed) {
+      this.player.jump();
     }
 
-    // Handle CPU AI Attack Request
-    if (this.cpu.cpuWantsAttack && !this.cpuAttacking) {
-      const isSmash = Phaser.Math.Between(0, 100) < 35;
-      this.executeAttack(this.cpu, this.player, isSmash);
+    // Normal Attack (Z / J)
+    const attackPressed = (this.keyZ && Phaser.Input.Keyboard.JustDown(this.keyZ)) ||
+                          (this.keyJ && Phaser.Input.Keyboard.JustDown(this.keyJ));
+
+    if (attackPressed) {
+      this.executeAttack(this.player, this.cpu, false);
     }
 
-    // Check Blast Zone Knockout (Screen Boundary Out)
-    this.checkBlastZone(this.player, 300, 250);
-    this.checkBlastZone(this.cpu, 500, 250);
+    // Smash Attack (X / K)
+    const smashPressed = (this.keyX && Phaser.Input.Keyboard.JustDown(this.keyX)) ||
+                         (this.keyK && Phaser.Input.Keyboard.JustDown(this.keyK));
 
-    // Update UI HUD
-    this.updateHUD();
+    if (smashPressed) {
+      this.executeAttack(this.player, this.cpu, true);
+    }
   }
 
   /**
-   * Executes an attack (Normal or Smash) from attacker to defender.
+   * Title Screen Overlay
+   */
+  private createTitleScreen(): void {
+    this.titleContainer = this.add.container(480, 290);
+
+    const backdrop = this.add.rectangle(0, 0, 560, 360, 0x0a0f1d, 0.94);
+    backdrop.setStrokeStyle(3, 0x38bdf8);
+
+    const title = this.add.text(0, -110, '⚔️ スマブラ Web ⚔️', {
+      fontSize: '34px',
+      color: '#38bdf8',
+      fontStyle: 'bold',
+      stroke: '#0369a1',
+      strokeThickness: 4
+    }).setOrigin(0.5);
+
+    const desc = this.add.text(0, -55, '相手にダメージを与えて画面外へスマッシュ！\n3ストック先取で勝利！', {
+      fontSize: '15px',
+      color: '#cbd5e1',
+      align: 'center',
+      lineSpacing: 6
+    }).setOrigin(0.5);
+
+    const guide = this.add.text(0, 15, '🎮 操作方法\n移動: [←/→] または [A/D]\nジャンプ: [Space/↑/W] (2段ジャンプ可)\n攻撃: [Z/J]  |  スマッシュ: [X/K]', {
+      fontSize: '14px',
+      color: '#94a3b8',
+      align: 'center',
+      lineSpacing: 4
+    }).setOrigin(0.5);
+
+    const startBtn = this.add.text(0, 110, '⚔️ 対戦スタート (SPACE / タップ)', {
+      fontSize: '22px',
+      color: '#ffffff',
+      backgroundColor: '#2563eb',
+      padding: { x: 26, y: 12 },
+      fontStyle: 'bold'
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+
+    startBtn.on('pointerdown', () => {
+      this.startCountdown();
+    });
+
+    this.titleContainer.add([backdrop, title, desc, guide, startBtn]);
+  }
+
+  /**
+   * Starts the "3, 2, 1, GO!" Countdown Sequence
+   */
+  private startCountdown(): void {
+    if (this.gameState !== 'TITLE') return;
+    this.gameState = 'COUNTDOWN';
+
+    // Hide title
+    this.tweens.add({
+      targets: this.titleContainer,
+      alpha: 0,
+      scaleX: 0.85,
+      scaleY: 0.85,
+      duration: 250,
+      onComplete: () => {
+        this.titleContainer.destroy();
+      }
+    });
+
+    // Reset fighters
+    this.player.setPosition(350, 380);
+    this.player.isFrozen = true;
+    this.cpu.setPosition(610, 380);
+    this.cpu.isFrozen = true;
+
+    const sequence = [
+      { text: '3', color: '#38bdf8', scale: 1.6 },
+      { text: '2', color: '#facc15', scale: 1.6 },
+      { text: '1', color: '#fb923c', scale: 1.6 },
+      { text: 'GO!!', color: '#22c55e', scale: 2.2 }
+    ];
+
+    let stepIndex = 0;
+
+    const playNextStep = () => {
+      if (stepIndex >= sequence.length) {
+        // Countdown finished, begin battle!
+        this.gameState = 'PLAYING';
+        this.player.isFrozen = false;
+        this.cpu.isFrozen = false;
+        this.countdownText.setAlpha(0);
+        return;
+      }
+
+      const item = sequence[stepIndex];
+      this.countdownText.setText(item.text);
+      this.countdownText.setColor(item.color);
+      this.countdownText.setScale(0.4);
+      this.countdownText.setAlpha(0);
+
+      this.tweens.add({
+        targets: this.countdownText,
+        scaleX: item.scale,
+        scaleY: item.scale,
+        alpha: 1,
+        duration: 350,
+        ease: 'Back.easeOut',
+        onComplete: () => {
+          this.time.delayedCall(250, () => {
+            this.tweens.add({
+              targets: this.countdownText,
+              alpha: 0,
+              duration: 150,
+              onComplete: () => {
+                stepIndex++;
+                playNextStep();
+              }
+            });
+          });
+        }
+      });
+    };
+
+    this.time.delayedCall(300, () => {
+      playNextStep();
+    });
+  }
+
+  /**
+   * Executes an attack action.
    */
   private executeAttack(attacker: Player, defender: Player, isSmash: boolean): void {
     const isPlayer = attacker === this.player;
@@ -159,13 +351,13 @@ export class MainScene extends Phaser.Scene {
     else this.cpuAttacking = true;
 
     const facingRight = !attacker.flipX;
-    const attackRange = isSmash ? 55 : 42;
+    const attackRange = isSmash ? 60 : 45;
     const attackX = attacker.x + (facingRight ? attackRange : -attackRange);
     const attackY = attacker.y;
 
-    // Attack Slash Visual Effect
+    // Visual slash arc
     const color = isSmash ? 0xef4444 : (isPlayer ? 0x38bdf8 : 0xf59e0b);
-    const slashSize = isSmash ? 38 : 26;
+    const slashSize = isSmash ? 42 : 28;
     const slash = this.add.circle(attackX, attackY, slashSize, color, 0.85);
 
     this.tweens.add({
@@ -173,30 +365,30 @@ export class MainScene extends Phaser.Scene {
       scaleX: 1.6,
       scaleY: 1.6,
       alpha: 0,
-      duration: isSmash ? 220 : 140,
+      duration: isSmash ? 200 : 130,
       onComplete: () => slash.destroy()
     });
 
     // Check hit overlap
     const dist = Phaser.Math.Distance.Between(attackX, attackY, defender.x, defender.y);
-    if (dist < (isSmash ? 60 : 48)) {
+    if (dist < (isSmash ? 65 : 52)) {
       const dirX = facingRight ? 1 : -1;
-      const dirY = isSmash ? -0.85 : -0.5;
+      const dirY = isSmash ? -0.85 : -0.45;
 
       const baseDamage = isSmash ? 16 : 8;
-      const baseKnockbackX = dirX * (isSmash ? 320 : 200);
-      const baseKnockbackY = dirY * (isSmash ? 340 : 220);
+      const baseKnockbackX = dirX * (isSmash ? 340 : 210);
+      const baseKnockbackY = dirY * (isSmash ? 360 : 230);
 
       defender.takeKnockback(baseDamage, baseKnockbackX, baseKnockbackY);
 
-      // Hitstop and Camera Shake
+      // Hitstop & Camera Shake
       this.cameras.main.shake(isSmash ? 140 : 60, isSmash ? 0.012 : 0.005);
 
       // Hit sparks particle effect
       this.createHitSparks(attackX, attackY, isSmash);
     }
 
-    const cooldown = isSmash ? 320 : 180;
+    const cooldown = isSmash ? 300 : 160;
     this.time.delayedCall(cooldown, () => {
       if (isPlayer) this.playerAttacking = false;
       else this.cpuAttacking = false;
@@ -227,12 +419,11 @@ export class MainScene extends Phaser.Scene {
   }
 
   /**
-   * Checks if fighter has been launched outside the Blast Zone (KO).
+   * Checks if fighter has fallen or been launched into the Blast Zone (KO).
    */
   private checkBlastZone(fighter: Player, respawnX: number, respawnY: number): void {
-    // Blast zone bounds: X < -70 || X > 870 || Y < -110 || Y > 690
-    if (fighter.x < -70 || fighter.x > 870 || fighter.y < -110 || fighter.y > 690) {
-      // Trigger Blast KO Effects
+    // 960x600 screen bounds with generous blast zones
+    if (fighter.x < -100 || fighter.x > 1060 || fighter.y < -140 || fighter.y > 720) {
       this.triggerBlastEffects(fighter.x, fighter.y);
 
       fighter.stocks -= 1;
@@ -240,10 +431,9 @@ export class MainScene extends Phaser.Scene {
       if (fighter.stocks <= 0) {
         this.handleGameOver(fighter === this.cpu ? 'PLAYER 1 VICTORY! 🎉' : 'GAME OVER 💀');
       } else {
-        // Respawn after short delay
-        fighter.setPosition(-200, -200); // Hide off-screen temporarily
+        fighter.setPosition(-300, -300); // Temporarily hide
         this.time.delayedCall(1000, () => {
-          if (!this.isGameOver) {
+          if (this.gameState === 'PLAYING') {
             fighter.respawn(respawnX, respawnY);
           }
         });
@@ -252,36 +442,34 @@ export class MainScene extends Phaser.Scene {
   }
 
   private triggerBlastEffects(x: number, y: number): void {
-    // Clamp explosion location near screen edge for visibility
-    const clampX = Phaser.Math.Clamp(x, 20, 780);
-    const clampY = Phaser.Math.Clamp(y, 20, 580);
+    const clampX = Phaser.Math.Clamp(x, 30, 930);
+    const clampY = Phaser.Math.Clamp(y, 30, 570);
 
-    // Explosive Flash Ring
     const ring = this.add.circle(clampX, clampY, 20, 0xef4444, 0.9);
     ring.setStrokeStyle(6, 0xfacc15);
 
     this.tweens.add({
       targets: ring,
-      radius: 120,
+      radius: 140,
       alpha: 0,
       duration: 400,
       onComplete: () => ring.destroy()
     });
 
-    this.cameras.main.shake(250, 0.025);
+    this.cameras.main.shake(260, 0.025);
     this.cameras.main.flash(200, 255, 255, 255, true);
   }
 
   private handleGameOver(winnerText: string): void {
-    this.isGameOver = true;
+    this.gameState = 'GAMEOVER';
 
-    this.gameOverContainer = this.add.container(400, 300);
+    this.gameOverContainer = this.add.container(480, 300);
 
-    const bg = this.add.rectangle(0, 0, 440, 220, 0x0f172a, 0.95);
+    const bg = this.add.rectangle(0, 0, 480, 240, 0x0a0f1d, 0.96);
     bg.setStrokeStyle(3, 0x38bdf8);
 
-    const title = this.add.text(0, -50, winnerText, {
-      fontSize: '32px',
+    const title = this.add.text(0, -55, winnerText, {
+      fontSize: '34px',
       color: winnerText.includes('VICTORY') ? '#4ade80' : '#f87171',
       fontStyle: 'bold'
     }).setOrigin(0.5);
@@ -291,11 +479,12 @@ export class MainScene extends Phaser.Scene {
       color: '#94a3b8'
     }).setOrigin(0.5);
 
-    const retryBtn = this.add.text(0, 55, '🔄 もう一度対戦する', {
-      fontSize: '20px',
+    const retryBtn = this.add.text(0, 60, '🔄 もう一度対戦する', {
+      fontSize: '22px',
       color: '#ffffff',
       backgroundColor: '#2563eb',
-      padding: { x: 20, y: 10 }
+      padding: { x: 24, y: 12 },
+      fontStyle: 'bold'
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
 
     retryBtn.on('pointerdown', () => {
@@ -307,30 +496,30 @@ export class MainScene extends Phaser.Scene {
 
   private createVirtualControls(): void {
     // 1. Left Movement (◀)
-    this.createButton(80, 520, 68, '◀', '#38bdf8', {
-      onDown: () => { this.player.moveLeftInput = true; },
+    this.createButton(90, 520, 72, '◀', '#38bdf8', {
+      onDown: () => { if (this.gameState === 'PLAYING') this.player.moveLeftInput = true; },
       onUp: () => { this.player.moveLeftInput = false; }
     });
 
     // 2. Right Movement (▶)
-    this.createButton(165, 520, 68, '▶', '#38bdf8', {
-      onDown: () => { this.player.moveRightInput = true; },
+    this.createButton(185, 520, 72, '▶', '#38bdf8', {
+      onDown: () => { if (this.gameState === 'PLAYING') this.player.moveRightInput = true; },
       onUp: () => { this.player.moveRightInput = false; }
     });
 
     // 3. Attack (⚔️)
-    this.createButton(560, 520, 64, '⚔️', '#3b82f6', {
-      onDown: () => this.executeAttack(this.player, this.cpu, false)
+    this.createButton(680, 520, 66, '⚔️', '#3b82f6', {
+      onDown: () => { if (this.gameState === 'PLAYING') this.executeAttack(this.player, this.cpu, false); }
     });
 
     // 4. Smash Attack (💥)
-    this.createButton(640, 520, 64, '💥', '#ef4444', {
-      onDown: () => this.executeAttack(this.player, this.cpu, true)
+    this.createButton(770, 520, 66, '💥', '#ef4444', {
+      onDown: () => { if (this.gameState === 'PLAYING') this.executeAttack(this.player, this.cpu, true); }
     });
 
     // 5. Jump (⬆️)
-    this.createButton(725, 520, 68, '⬆️', '#10b981', {
-      onDown: () => this.player.jump()
+    this.createButton(865, 520, 72, '⬆️', '#10b981', {
+      onDown: () => { if (this.gameState === 'PLAYING') this.player.jump(); }
     });
   }
 
@@ -349,7 +538,7 @@ export class MainScene extends Phaser.Scene {
     bg.setStrokeStyle(3, 0xffffff, 0.85);
 
     const text = this.add.text(0, 0, label, {
-      fontSize: '20px',
+      fontSize: '22px',
       color: '#ffffff',
       fontStyle: 'bold'
     }).setOrigin(0.5);
@@ -377,30 +566,28 @@ export class MainScene extends Phaser.Scene {
   }
 
   private createHUD(): void {
-    // Stage Title
-    this.add.text(400, 20, '⚔️ スマブラ Web - 本格対戦モード ⚔️', {
+    this.hudContainer = this.add.container(0, 0);
+
+    // Stage Header
+    const title = this.add.text(480, 20, '⚔️ スマブラ Web - BATTLEFIELD ⚔️', {
       fontSize: '18px',
       color: '#f8fafc',
       fontStyle: 'bold'
     }).setOrigin(0.5);
 
-    // Controls tip
-    this.add.text(400, 44, '操作: [←/→]移動 [Space/↑]2段ジャンプ [Z]攻撃 [X]スマッシュ攻撃', {
-      fontSize: '12px',
-      color: '#94a3b8'
-    }).setOrigin(0.5);
+    // Player 1 HUD Box (Left)
+    const p1Box = this.add.rectangle(170, 85, 230, 60, 0x0f172a, 0.88).setStrokeStyle(2, 0x38bdf8);
+    const p1Label = this.add.text(90, 68, 'P1 HERO', { fontSize: '13px', color: '#38bdf8', fontStyle: 'bold' });
+    this.playerStockText = this.add.text(90, 88, '● ● ●', { fontSize: '15px', color: '#facc15' });
+    this.playerDamageText = this.add.text(245, 85, '0%', { fontSize: '30px', color: '#2ecc71', fontStyle: 'bold' }).setOrigin(1, 0.5);
 
-    // Player 1 HUD Box
-    this.add.rectangle(150, 95, 200, 56, 0x0f172a, 0.85).setStrokeStyle(2, 0x38bdf8);
-    this.add.text(80, 80, 'P1 HERO', { fontSize: '12px', color: '#38bdf8', fontStyle: 'bold' });
-    this.playerStockText = this.add.text(80, 98, '● ● ●', { fontSize: '14px', color: '#facc15' });
-    this.playerDamageText = this.add.text(215, 95, '0%', { fontSize: '28px', color: '#2ecc71', fontStyle: 'bold' }).setOrigin(1, 0.5);
+    // CPU Opponent HUD Box (Right)
+    const cpuBox = this.add.rectangle(790, 85, 230, 60, 0x0f172a, 0.88).setStrokeStyle(2, 0xf43f5e);
+    const cpuLabel = this.add.text(710, 68, 'CPU FIGHTER', { fontSize: '13px', color: '#f43f5e', fontStyle: 'bold' });
+    this.cpuStockText = this.add.text(710, 88, '● ● ●', { fontSize: '15px', color: '#facc15' });
+    this.cpuDamageText = this.add.text(865, 85, '0%', { fontSize: '30px', color: '#2ecc71', fontStyle: 'bold' }).setOrigin(1, 0.5);
 
-    // CPU Opponent HUD Box
-    this.add.rectangle(650, 95, 200, 56, 0x0f172a, 0.85).setStrokeStyle(2, 0xf43f5e);
-    this.add.text(580, 80, 'CPU FIGHTER', { fontSize: '12px', color: '#f43f5e', fontStyle: 'bold' });
-    this.cpuStockText = this.add.text(580, 98, '● ● ●', { fontSize: '14px', color: '#facc15' });
-    this.cpuDamageText = this.add.text(715, 95, '0%', { fontSize: '28px', color: '#2ecc71', fontStyle: 'bold' }).setOrigin(1, 0.5);
+    this.hudContainer.add([title, p1Box, p1Label, this.playerStockText, this.playerDamageText, cpuBox, cpuLabel, this.cpuStockText, this.cpuDamageText]);
   }
 
   private updateHUD(): void {

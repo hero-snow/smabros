@@ -3,19 +3,19 @@ import { MainScene } from './scenes/MainScene';
 
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
-  width: 800,
+  width: 960,
   height: 600,
   parent: 'app',
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
-    width: 800,
+    width: 960,
     height: 600
   },
   physics: {
     default: 'arcade',
     arcade: {
-      gravity: { x: 0, y: 600 },
+      gravity: { x: 0, y: 800 },
       debug: false
     }
   },
