@@ -1,17 +1,27 @@
 import Phaser from 'phaser';
 import { Player } from '../entities/Player';
+import { CHARACTERS, CharacterData } from '../data/characters';
+import { STAGES, StageData } from '../data/stages';
 
-type GameState = 'TITLE' | 'COUNTDOWN' | 'PLAYING' | 'GAMEOVER';
+type GameState = 'COUNTDOWN' | 'PLAYING' | 'GAMEOVER';
 
 export class MainScene extends Phaser.Scene {
-  private gameState: GameState = 'TITLE';
+  private p1CharData: CharacterData = CHARACTERS[0];
+  private cpuCharData: CharacterData = CHARACTERS[1];
+  private stageData: StageData = STAGES[0];
+
+  private gameState: GameState = 'COUNTDOWN';
 
   private player!: Player;
   private cpu!: Player;
+
   private mainStage!: Phaser.GameObjects.Rectangle;
-  private leftPlatform!: Phaser.GameObjects.Rectangle;
-  private rightPlatform!: Phaser.GameObjects.Rectangle;
-  private topPlatform!: Phaser.GameObjects.Rectangle;
+  private softPlatformObjects: Phaser.GameObjects.Rectangle[] = [];
+  private softPlatformDataList: any[] = [];
+
+  // Parallax Background elements
+  private bgStarsGroup!: Phaser.GameObjects.Group;
+  private parallaxFarGrid!: Phaser.GameObjects.Grid;
 
   // Keyboard keys
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
@@ -31,8 +41,7 @@ export class MainScene extends Phaser.Scene {
   private playerStockText!: Phaser.GameObjects.Text;
   private cpuStockText!: Phaser.GameObjects.Text;
 
-  // Title & Overlay Containers
-  private titleContainer!: Phaser.GameObjects.Container;
+  // Overlay Containers
   private countdownText!: Phaser.GameObjects.Text;
   private gameOverContainer!: Phaser.GameObjects.Container;
 
@@ -44,94 +53,115 @@ export class MainScene extends Phaser.Scene {
     super({ key: 'MainScene' });
   }
 
+  init(data: { p1Char?: CharacterData; cpuChar?: CharacterData; stage?: StageData }): void {
+    if (data.p1Char) this.p1CharData = data.p1Char;
+    if (data.cpuChar) this.cpuCharData = data.cpuChar;
+    if (data.stage) this.stageData = data.stage;
+  }
+
   preload(): void {
-    this.createProceduralTextures();
+    this.load.image(this.p1CharData.texture, `assets/${this.p1CharData.id}.png`);
+    this.load.image(this.cpuCharData.texture, `assets/${this.cpuCharData.id}.png`);
+    this.load.image(this.p1CharData.portrait, `assets/${this.p1CharData.id}_portrait.png`);
+    this.load.image(this.cpuCharData.portrait, `assets/${this.cpuCharData.id}_portrait.png`);
   }
 
   create(): void {
-    this.gameState = 'TITLE';
+    this.gameState = 'COUNTDOWN';
     this.playerAttacking = false;
     this.cpuAttacking = false;
 
-    // Enable multi-touch for mobile
     this.input.addPointer(3);
 
-    // 1. Wide Battlefield Background (960x600)
-    this.cameras.main.setBackgroundColor('#090d16');
-    this.add.grid(480, 300, 960, 600, 48, 48, 0x1e293b, 0.25, 0x334155, 0.45);
+    this.createStageBackground();
+    this.createStagePlatforms();
 
-    // Atmospheric nebulae/circles
-    this.add.circle(480, 270, 260, 0x38bdf8, 0.04);
-    this.add.circle(480, 270, 160, 0x818cf8, 0.07);
+    this.player = new Player(this, 350, 380, this.p1CharData, 'player');
+    this.cpu = new Player(this, 610, 380, this.cpuCharData, 'cpu');
 
-    // 2. Wide Main Floating Stage (Width: 580px, Center: 480, Height: 28px)
-    const stageX = 480;
-    const stageY = 460;
-    const stageW = 580;
-    const stageH = 28;
-
-    this.mainStage = this.add.rectangle(stageX, stageY, stageW, stageH, 0x2563eb);
-    this.mainStage.setStrokeStyle(3, 0x60a5fa);
-    this.physics.add.existing(this.mainStage, true);
-    (this.mainStage.body as Phaser.Physics.Arcade.StaticBody).updateFromGameObject();
-
-    // Stage decorative high-tech underside
-    this.add.polygon(stageX, stageY + 28, [
-      -stageW / 2 + 30, 0,
-      stageW / 2 - 30, 0,
-      stageW / 2 - 120, 65,
-      -stageW / 2 + 120, 65
-    ], 0x1e3a8a, 0.95);
-
-    // 3. Three Battlefield Soft Platforms (Left, Right, Top)
-    // Left platform
-    this.leftPlatform = this.add.rectangle(310, 340, 150, 12, 0x38bdf8, 0.9);
-    this.leftPlatform.setStrokeStyle(2, 0x7dd3fc);
-    this.physics.add.existing(this.leftPlatform, true);
-    (this.leftPlatform.body as Phaser.Physics.Arcade.StaticBody).updateFromGameObject();
-
-    // Right platform
-    this.rightPlatform = this.add.rectangle(650, 340, 150, 12, 0x38bdf8, 0.9);
-    this.rightPlatform.setStrokeStyle(2, 0x7dd3fc);
-    this.physics.add.existing(this.rightPlatform, true);
-    (this.rightPlatform.body as Phaser.Physics.Arcade.StaticBody).updateFromGameObject();
-
-    // Top Center platform
-    this.topPlatform = this.add.rectangle(480, 220, 150, 12, 0x38bdf8, 0.9);
-    this.topPlatform.setStrokeStyle(2, 0x7dd3fc);
-    this.physics.add.existing(this.topPlatform, true);
-    (this.topPlatform.body as Phaser.Physics.Arcade.StaticBody).updateFromGameObject();
-
-    // 4. Create Player & CPU Fighters
-    this.player = new Player(this, 350, 380, 'player_tex', 'player');
-    this.cpu = new Player(this, 610, 380, 'dummy_tex', 'cpu');
-
-    // Physics Collisions with Platforms
-    const platforms = [this.mainStage, this.leftPlatform, this.rightPlatform, this.topPlatform];
-    this.physics.add.collider(this.player, platforms);
-    this.physics.add.collider(this.cpu, platforms);
+    const allPlatforms = [this.mainStage, ...this.softPlatformObjects];
+    this.physics.add.collider(this.player, allPlatforms);
+    this.physics.add.collider(this.cpu, allPlatforms);
     this.physics.add.collider(this.player, this.cpu);
 
-    // Freeze both fighters initially
     this.player.isFrozen = true;
     this.cpu.isFrozen = true;
 
-    // 5. Setup UI & Controls
     this.createHUD();
     this.createVirtualControls();
     this.setupKeyboardInput();
 
-    // 6. Countdown Display Object (Hidden at start)
-    this.countdownText = this.add.text(480, 280, '', {
-      fontSize: '72px',
+    this.countdownText = this.add.text(480, 260, '', {
+      fontSize: '80px',
       color: '#facc15',
       fontStyle: 'bold',
       stroke: '#000000',
       strokeThickness: 8
     }).setOrigin(0.5).setAlpha(0);
 
-    // 7. Show Title Screen
-    this.createTitleScreen();
+    this.startCountdown();
+  }
+
+  private createStageBackground(): void {
+    const { width, height } = this.scale;
+
+    this.cameras.main.setBackgroundColor(this.stageData.bgGradTop);
+
+    this.parallaxFarGrid = this.add.grid(
+      width / 2, height / 2,
+      width + 200, height + 200,
+      48, 48,
+      0x000000, 0,
+      this.stageData.gridColor, 0.25
+    );
+
+    this.bgStarsGroup = this.add.group();
+    const particleCount = 35;
+
+    for (let i = 0; i < particleCount; i++) {
+      const x = Phaser.Math.Between(0, width);
+      const y = Phaser.Math.Between(0, height);
+      const size = Phaser.Math.Between(2, 6);
+      const color = this.stageData.themeColor;
+
+      const p = this.add.circle(x, y, size, color, Phaser.Math.FloatBetween(0.3, 0.8));
+      this.bgStarsGroup.add(p);
+    }
+  }
+
+  private createStagePlatforms(): void {
+    const ms = this.stageData.mainPlatform;
+
+    this.mainStage = this.add.rectangle(ms.x, ms.y, ms.width, ms.height, ms.color);
+    this.mainStage.setStrokeStyle(3, ms.strokeColor);
+    this.physics.add.existing(this.mainStage, true);
+
+    this.add.polygon(ms.x, ms.y + ms.height, [
+      -ms.width / 2 + 30, 0,
+      ms.width / 2 - 30, 0,
+      ms.width / 2 - 120, 60,
+      -ms.width / 2 + 120, 60
+    ], ms.color, 0.7);
+
+    this.softPlatformObjects = [];
+    this.softPlatformDataList = [];
+
+    this.stageData.softPlatforms.forEach((sp) => {
+      const plat = this.add.rectangle(sp.x, sp.y, sp.width, sp.height, sp.color, 0.9);
+      plat.setStrokeStyle(2, sp.strokeColor);
+      this.physics.add.existing(plat, true);
+
+      this.softPlatformObjects.push(plat);
+      this.softPlatformDataList.push({
+        rect: plat,
+        baseX: sp.x,
+        baseY: sp.y,
+        isMoving: sp.isMoving || false,
+        moveRangeX: sp.moveRangeX || 0,
+        moveRangeY: sp.moveRangeY || 0,
+        moveSpeed: sp.moveSpeed || 0.002
+      });
+    });
   }
 
   private setupKeyboardInput(): void {
@@ -148,38 +178,58 @@ export class MainScene extends Phaser.Scene {
     }
   }
 
-  update(_time: number, delta: number): void {
-    if (this.gameState === 'TITLE') {
-      // Allow starting via Space on title screen
-      if (this.keySpace && Phaser.Input.Keyboard.JustDown(this.keySpace)) {
-        this.startCountdown();
-      }
-      return;
-    }
-
+  update(time: number, delta: number): void {
     if (this.gameState === 'GAMEOVER') return;
 
-    // Update Player & CPU
+    this.updateParallaxBackground();
+    this.updateMovingPlatforms(time);
+
     this.player.updatePlayer(delta, this.cpu);
     this.cpu.updatePlayer(delta, this.player);
 
     if (this.gameState === 'PLAYING') {
-      // Keyboard input handling (Arrow keys + WASD)
       this.handlePlayerControls();
 
-      // CPU AI Attack handling
       if (this.cpu.cpuWantsAttack && !this.cpuAttacking) {
         const isSmash = Phaser.Math.Between(0, 100) < 35;
         this.executeAttack(this.cpu, this.player, isSmash);
       }
 
-      // Check Out-of-bounds Knockout (Blast Zone)
       this.checkBlastZone(this.player, 350, 200);
       this.checkBlastZone(this.cpu, 610, 200);
 
-      // Update HUD
       this.updateHUD();
     }
+  }
+
+  private updateParallaxBackground(): void {
+    const focusX = (this.player.x + this.cpu.x) / 2;
+    const focusY = (this.player.y + this.cpu.y) / 2;
+
+    this.parallaxFarGrid.x = 480 - (focusX - 480) * 0.05;
+    this.parallaxFarGrid.y = 300 - (focusY - 300) * 0.05;
+
+    const particles = this.bgStarsGroup.getChildren();
+    particles.forEach((p, idx) => {
+      const circle = p as Phaser.GameObjects.Arc;
+      circle.y -= 0.3 + (idx % 3) * 0.2;
+      if (circle.y < -10) {
+        circle.y = 610;
+        circle.x = Phaser.Math.Between(0, 960);
+      }
+    });
+  }
+
+  private updateMovingPlatforms(time: number): void {
+    this.softPlatformDataList.forEach(sp => {
+      if (sp.isMoving) {
+        const newX = sp.baseX + Math.sin(time * sp.moveSpeed) * sp.moveRangeX;
+        const newY = sp.baseY + Math.sin(time * sp.moveSpeed) * sp.moveRangeY;
+
+        sp.rect.setPosition(newX, newY);
+        (sp.rect.body as Phaser.Physics.Arcade.StaticBody).updateFromGameObject();
+      }
+    });
   }
 
   private handlePlayerControls(): void {
@@ -189,7 +239,6 @@ export class MainScene extends Phaser.Scene {
     this.player.moveLeftInput = isLeft;
     this.player.moveRightInput = isRight;
 
-    // Jump (Up / Space / W)
     const jumpPressed = (this.cursors && Phaser.Input.Keyboard.JustDown(this.cursors.up)) ||
                         (this.keySpace && Phaser.Input.Keyboard.JustDown(this.keySpace)) ||
                         (this.keyW && Phaser.Input.Keyboard.JustDown(this.keyW));
@@ -198,7 +247,6 @@ export class MainScene extends Phaser.Scene {
       this.player.jump();
     }
 
-    // Normal Attack (Z / J)
     const attackPressed = (this.keyZ && Phaser.Input.Keyboard.JustDown(this.keyZ)) ||
                           (this.keyJ && Phaser.Input.Keyboard.JustDown(this.keyJ));
 
@@ -206,7 +254,6 @@ export class MainScene extends Phaser.Scene {
       this.executeAttack(this.player, this.cpu, false);
     }
 
-    // Smash Attack (X / K)
     const smashPressed = (this.keyX && Phaser.Input.Keyboard.JustDown(this.keyX)) ||
                          (this.keyK && Phaser.Input.Keyboard.JustDown(this.keyK));
 
@@ -215,72 +262,7 @@ export class MainScene extends Phaser.Scene {
     }
   }
 
-  /**
-   * Title Screen Overlay
-   */
-  private createTitleScreen(): void {
-    this.titleContainer = this.add.container(480, 290);
-
-    const backdrop = this.add.rectangle(0, 0, 560, 360, 0x0a0f1d, 0.94);
-    backdrop.setStrokeStyle(3, 0x38bdf8);
-
-    const title = this.add.text(0, -110, '⚔️ スマブラ Web ⚔️', {
-      fontSize: '34px',
-      color: '#38bdf8',
-      fontStyle: 'bold',
-      stroke: '#0369a1',
-      strokeThickness: 4
-    }).setOrigin(0.5);
-
-    const desc = this.add.text(0, -55, '相手にダメージを与えて画面外へスマッシュ！\n3ストック先取で勝利！', {
-      fontSize: '15px',
-      color: '#cbd5e1',
-      align: 'center',
-      lineSpacing: 6
-    }).setOrigin(0.5);
-
-    const guide = this.add.text(0, 15, '🎮 操作方法\n移動: [←/→] または [A/D]\nジャンプ: [Space/↑/W] (2段ジャンプ可)\n攻撃: [Z/J]  |  スマッシュ: [X/K]', {
-      fontSize: '14px',
-      color: '#94a3b8',
-      align: 'center',
-      lineSpacing: 4
-    }).setOrigin(0.5);
-
-    const startBtn = this.add.text(0, 110, '⚔️ 対戦スタート (SPACE / タップ)', {
-      fontSize: '22px',
-      color: '#ffffff',
-      backgroundColor: '#2563eb',
-      padding: { x: 26, y: 12 },
-      fontStyle: 'bold'
-    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
-
-    startBtn.on('pointerdown', () => {
-      this.startCountdown();
-    });
-
-    this.titleContainer.add([backdrop, title, desc, guide, startBtn]);
-  }
-
-  /**
-   * Starts the "3, 2, 1, GO!" Countdown Sequence
-   */
   private startCountdown(): void {
-    if (this.gameState !== 'TITLE') return;
-    this.gameState = 'COUNTDOWN';
-
-    // Hide title
-    this.tweens.add({
-      targets: this.titleContainer,
-      alpha: 0,
-      scaleX: 0.85,
-      scaleY: 0.85,
-      duration: 250,
-      onComplete: () => {
-        this.titleContainer.destroy();
-      }
-    });
-
-    // Reset fighters
     this.player.setPosition(350, 380);
     this.player.isFrozen = true;
     this.cpu.setPosition(610, 380);
@@ -297,7 +279,6 @@ export class MainScene extends Phaser.Scene {
 
     const playNextStep = () => {
       if (stepIndex >= sequence.length) {
-        // Countdown finished, begin battle!
         this.gameState = 'PLAYING';
         this.player.isFrozen = false;
         this.cpu.isFrozen = false;
@@ -339,9 +320,6 @@ export class MainScene extends Phaser.Scene {
     });
   }
 
-  /**
-   * Executes an attack action.
-   */
   private executeAttack(attacker: Player, defender: Player, isSmash: boolean): void {
     const isPlayer = attacker === this.player;
     if (isPlayer && this.playerAttacking) return;
@@ -355,9 +333,8 @@ export class MainScene extends Phaser.Scene {
     const attackX = attacker.x + (facingRight ? attackRange : -attackRange);
     const attackY = attacker.y;
 
-    // Visual slash arc
-    const color = isSmash ? 0xef4444 : (isPlayer ? 0x38bdf8 : 0xf59e0b);
-    const slashSize = isSmash ? 42 : 28;
+    const color = isSmash ? 0xef4444 : attacker.charData.themeColor;
+    const slashSize = isSmash ? 45 : 30;
     const slash = this.add.circle(attackX, attackY, slashSize, color, 0.85);
 
     this.tweens.add({
@@ -369,22 +346,18 @@ export class MainScene extends Phaser.Scene {
       onComplete: () => slash.destroy()
     });
 
-    // Check hit overlap
     const dist = Phaser.Math.Distance.Between(attackX, attackY, defender.x, defender.y);
-    if (dist < (isSmash ? 65 : 52)) {
+    if (dist < (isSmash ? 68 : 55)) {
       const dirX = facingRight ? 1 : -1;
       const dirY = isSmash ? -0.85 : -0.45;
 
-      const baseDamage = isSmash ? 16 : 8;
-      const baseKnockbackX = dirX * (isSmash ? 340 : 210);
-      const baseKnockbackY = dirY * (isSmash ? 360 : 230);
+      const baseDamage = (isSmash ? 16 : 8) * attacker.charData.stats.attackPower;
+      const baseKnockbackX = dirX * (isSmash ? 360 : 220);
+      const baseKnockbackY = dirY * (isSmash ? 380 : 240);
 
       defender.takeKnockback(baseDamage, baseKnockbackX, baseKnockbackY);
 
-      // Hitstop & Camera Shake
-      this.cameras.main.shake(isSmash ? 140 : 60, isSmash ? 0.012 : 0.005);
-
-      // Hit sparks particle effect
+      this.cameras.main.shake(isSmash ? 160 : 70, isSmash ? 0.015 : 0.006);
       this.createHitSparks(attackX, attackY, isSmash);
     }
 
@@ -396,15 +369,15 @@ export class MainScene extends Phaser.Scene {
   }
 
   private createHitSparks(x: number, y: number, isSmash: boolean): void {
-    const count = isSmash ? 12 : 6;
+    const count = isSmash ? 14 : 7;
     for (let i = 0; i < count; i++) {
       const angle = Phaser.Math.Between(0, 360);
-      const speed = Phaser.Math.Between(80, isSmash ? 280 : 160);
-      const spark = this.add.circle(x, y, Phaser.Math.Between(3, 6), isSmash ? 0xfacc15 : 0xffffff, 1);
+      const speed = Phaser.Math.Between(80, isSmash ? 300 : 170);
+      const spark = this.add.circle(x, y, Phaser.Math.Between(3, 7), isSmash ? 0xfacc15 : 0xffffff, 1);
 
       const rad = Phaser.Math.DegToRad(angle);
-      const targetX = x + Math.cos(rad) * speed * 0.2;
-      const targetY = y + Math.sin(rad) * speed * 0.2;
+      const targetX = x + Math.cos(rad) * speed * 0.22;
+      const targetY = y + Math.sin(rad) * speed * 0.22;
 
       this.tweens.add({
         targets: spark,
@@ -412,26 +385,23 @@ export class MainScene extends Phaser.Scene {
         y: targetY,
         alpha: 0,
         scale: 0.2,
-        duration: 200,
+        duration: 220,
         onComplete: () => spark.destroy()
       });
     }
   }
 
-  /**
-   * Checks if fighter has fallen or been launched into the Blast Zone (KO).
-   */
   private checkBlastZone(fighter: Player, respawnX: number, respawnY: number): void {
-    // 960x600 screen bounds with generous blast zones
     if (fighter.x < -100 || fighter.x > 1060 || fighter.y < -140 || fighter.y > 720) {
       this.triggerBlastEffects(fighter.x, fighter.y);
 
       fighter.stocks -= 1;
 
       if (fighter.stocks <= 0) {
-        this.handleGameOver(fighter === this.cpu ? 'PLAYER 1 VICTORY! 🎉' : 'GAME OVER 💀');
+        const isPlayerWin = fighter === this.cpu;
+        this.handleGameOver(isPlayerWin ? `${this.p1CharData.name} VICTORY! 🎉` : 'GAME OVER 💀');
       } else {
-        fighter.setPosition(-300, -300); // Temporarily hide
+        fighter.setPosition(-300, -300);
         this.time.delayedCall(1000, () => {
           if (this.gameState === 'PLAYING') {
             fighter.respawn(respawnX, respawnY);
@@ -450,13 +420,13 @@ export class MainScene extends Phaser.Scene {
 
     this.tweens.add({
       targets: ring,
-      radius: 140,
+      radius: 150,
       alpha: 0,
       duration: 400,
       onComplete: () => ring.destroy()
     });
 
-    this.cameras.main.shake(260, 0.025);
+    this.cameras.main.shake(280, 0.028);
     this.cameras.main.flash(200, 255, 255, 255, true);
   }
 
@@ -465,25 +435,37 @@ export class MainScene extends Phaser.Scene {
 
     this.gameOverContainer = this.add.container(480, 300);
 
-    const bg = this.add.rectangle(0, 0, 480, 240, 0x0a0f1d, 0.96);
+    const bg = this.add.rectangle(0, 0, 520, 260, 0x0a0f1d, 0.96);
     bg.setStrokeStyle(3, 0x38bdf8);
 
-    const title = this.add.text(0, -55, winnerText, {
-      fontSize: '34px',
+    const title = this.add.text(0, -60, winnerText, {
+      fontSize: '32px',
       color: winnerText.includes('VICTORY') ? '#4ade80' : '#f87171',
       fontStyle: 'bold'
     }).setOrigin(0.5);
 
-    const sub = this.add.text(0, 0, '対戦終了！ もう一度プレイしますか？', {
+    const sub = this.add.text(0, -5, '対戦終了！ 次の戦いへ進みますか？', {
       fontSize: '16px',
       color: '#94a3b8'
     }).setOrigin(0.5);
 
-    const retryBtn = this.add.text(0, 60, '🔄 もう一度対戦する', {
-      fontSize: '22px',
+    const charBtn = this.add.text(-120, 65, '🔄 キャラ変更', {
+      fontSize: '18px',
+      color: '#ffffff',
+      backgroundColor: '#334155',
+      padding: { x: 18, y: 10 },
+      fontStyle: 'bold'
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+
+    charBtn.on('pointerdown', () => {
+      this.scene.start('CharSelectScene');
+    });
+
+    const retryBtn = this.add.text(120, 65, '⚔️ 再戦する', {
+      fontSize: '18px',
       color: '#ffffff',
       backgroundColor: '#2563eb',
-      padding: { x: 24, y: 12 },
+      padding: { x: 22, y: 10 },
       fontStyle: 'bold'
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
 
@@ -491,33 +473,28 @@ export class MainScene extends Phaser.Scene {
       this.scene.restart();
     });
 
-    this.gameOverContainer.add([bg, title, sub, retryBtn]);
+    this.gameOverContainer.add([bg, title, sub, charBtn, retryBtn]);
   }
 
   private createVirtualControls(): void {
-    // 1. Left Movement (◀)
     this.createButton(90, 520, 72, '◀', '#38bdf8', {
       onDown: () => { if (this.gameState === 'PLAYING') this.player.moveLeftInput = true; },
       onUp: () => { this.player.moveLeftInput = false; }
     });
 
-    // 2. Right Movement (▶)
     this.createButton(185, 520, 72, '▶', '#38bdf8', {
       onDown: () => { if (this.gameState === 'PLAYING') this.player.moveRightInput = true; },
       onUp: () => { this.player.moveRightInput = false; }
     });
 
-    // 3. Attack (⚔️)
     this.createButton(680, 520, 66, '⚔️', '#3b82f6', {
       onDown: () => { if (this.gameState === 'PLAYING') this.executeAttack(this.player, this.cpu, false); }
     });
 
-    // 4. Smash Attack (💥)
     this.createButton(770, 520, 66, '💥', '#ef4444', {
       onDown: () => { if (this.gameState === 'PLAYING') this.executeAttack(this.player, this.cpu, true); }
     });
 
-    // 5. Jump (⬆️)
     this.createButton(865, 520, 72, '⬆️', '#10b981', {
       onDown: () => { if (this.gameState === 'PLAYING') this.player.jump(); }
     });
@@ -568,37 +545,34 @@ export class MainScene extends Phaser.Scene {
   private createHUD(): void {
     this.hudContainer = this.add.container(0, 0);
 
-    // Stage Header
-    const title = this.add.text(480, 20, '⚔️ スマブラ Web - BATTLEFIELD ⚔️', {
+    const title = this.add.text(480, 20, `⚔️ ${this.stageData.name.toUpperCase()} ⚔️`, {
       fontSize: '18px',
       color: '#f8fafc',
       fontStyle: 'bold'
     }).setOrigin(0.5);
 
-    // Player 1 HUD Box (Left)
     const p1Box = this.add.rectangle(170, 85, 230, 60, 0x0f172a, 0.88).setStrokeStyle(2, 0x38bdf8);
-    const p1Label = this.add.text(90, 68, 'P1 HERO', { fontSize: '13px', color: '#38bdf8', fontStyle: 'bold' });
-    this.playerStockText = this.add.text(90, 88, '● ● ●', { fontSize: '15px', color: '#facc15' });
-    this.playerDamageText = this.add.text(245, 85, '0%', { fontSize: '30px', color: '#2ecc71', fontStyle: 'bold' }).setOrigin(1, 0.5);
+    const p1Portrait = this.add.image(75, 85, this.p1CharData.portrait).setDisplaySize(44, 44);
+    const p1Label = this.add.text(108, 66, `1P: ${this.p1CharData.name}`, { fontSize: '13px', color: '#38bdf8', fontStyle: 'bold' });
+    this.playerStockText = this.add.text(108, 88, '● ● ●', { fontSize: '15px', color: '#facc15' });
+    this.playerDamageText = this.add.text(270, 85, '0%', { fontSize: '28px', color: '#2ecc71', fontStyle: 'bold' }).setOrigin(1, 0.5);
 
-    // CPU Opponent HUD Box (Right)
     const cpuBox = this.add.rectangle(790, 85, 230, 60, 0x0f172a, 0.88).setStrokeStyle(2, 0xf43f5e);
-    const cpuLabel = this.add.text(710, 68, 'CPU FIGHTER', { fontSize: '13px', color: '#f43f5e', fontStyle: 'bold' });
-    this.cpuStockText = this.add.text(710, 88, '● ● ●', { fontSize: '15px', color: '#facc15' });
-    this.cpuDamageText = this.add.text(865, 85, '0%', { fontSize: '30px', color: '#2ecc71', fontStyle: 'bold' }).setOrigin(1, 0.5);
+    const cpuPortrait = this.add.image(695, 85, this.cpuCharData.portrait).setDisplaySize(44, 44);
+    const cpuLabel = this.add.text(728, 66, `CPU: ${this.cpuCharData.name}`, { fontSize: '13px', color: '#f43f5e', fontStyle: 'bold' });
+    this.cpuStockText = this.add.text(728, 88, '● ● ●', { fontSize: '15px', color: '#facc15' });
+    this.cpuDamageText = this.add.text(890, 85, '0%', { fontSize: '28px', color: '#2ecc71', fontStyle: 'bold' }).setOrigin(1, 0.5);
 
-    this.hudContainer.add([title, p1Box, p1Label, this.playerStockText, this.playerDamageText, cpuBox, cpuLabel, this.cpuStockText, this.cpuDamageText]);
+    this.hudContainer.add([title, p1Box, p1Portrait, p1Label, this.playerStockText, this.playerDamageText, cpuBox, cpuPortrait, cpuLabel, this.cpuStockText, this.cpuDamageText]);
   }
 
   private updateHUD(): void {
-    // Update Damage %
     this.playerDamageText.setText(`${Math.floor(this.player.damagePercent)}%`);
     this.playerDamageText.setColor(this.getDamageColor(this.player.damagePercent));
 
     this.cpuDamageText.setText(`${Math.floor(this.cpu.damagePercent)}%`);
     this.cpuDamageText.setColor(this.getDamageColor(this.cpu.damagePercent));
 
-    // Update Stock dots
     this.playerStockText.setText('● '.repeat(Math.max(0, this.player.stocks)).trim());
     this.cpuStockText.setText('● '.repeat(Math.max(0, this.cpu.stocks)).trim());
   }
@@ -609,39 +583,5 @@ export class MainScene extends Phaser.Scene {
     if (pct < 120) return '#e67e22';
     if (pct < 160) return '#e74c3c';
     return '#a855f7';
-  }
-
-  private createProceduralTextures(): void {
-    // 1. Player texture (Blue Hero Body: 32x48)
-    if (!this.textures.exists('player_tex')) {
-      const gPlayer = this.make.graphics({ x: 0, y: 0 });
-      gPlayer.fillStyle(0x38bdf8);
-      gPlayer.fillRoundedRect(0, 0, 32, 48, 8);
-      gPlayer.fillStyle(0xffffff);
-      gPlayer.fillCircle(10, 14, 4);
-      gPlayer.fillCircle(22, 14, 4);
-      gPlayer.fillStyle(0x0f172a);
-      gPlayer.fillCircle(11, 14, 2);
-      gPlayer.fillCircle(23, 14, 2);
-      gPlayer.fillStyle(0xef4444);
-      gPlayer.fillRect(4, 24, 24, 6);
-      gPlayer.generateTexture('player_tex', 32, 48);
-      gPlayer.destroy();
-    }
-
-    // 2. CPU texture (Red Fighter Body: 32x48)
-    if (!this.textures.exists('dummy_tex')) {
-      const gDummy = this.make.graphics({ x: 0, y: 0 });
-      gDummy.fillStyle(0xf43f5e);
-      gDummy.fillRoundedRect(0, 0, 32, 48, 8);
-      gDummy.fillStyle(0xffffff);
-      gDummy.fillCircle(16, 16, 10);
-      gDummy.fillStyle(0xf43f5e);
-      gDummy.fillCircle(16, 16, 6);
-      gDummy.fillStyle(0xffffff);
-      gDummy.fillCircle(16, 16, 2);
-      gDummy.generateTexture('dummy_tex', 32, 48);
-      gDummy.destroy();
-    }
   }
 }

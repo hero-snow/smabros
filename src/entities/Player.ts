@@ -1,11 +1,13 @@
 import Phaser from 'phaser';
+import { CharacterData } from '../data/characters';
 
 export type FighterType = 'player' | 'cpu';
 
 export class Player extends Phaser.Physics.Arcade.Sprite {
   public fighterType: FighterType;
+  public charData: CharacterData;
+
   public damagePercent: number = 0;
-  public weight: number = 100;
   public stocks: number = 3;
   public isInvincible: boolean = false;
   public invincibleTimer: number = 0;
@@ -19,11 +21,6 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   public isFrozen: boolean = false; // Frozen during countdown
   private hitstunTimer: number = 0;
 
-  // Movement Physics parameters (Smash Bros snappy velocity parameters)
-  private runSpeed: number = 320;
-  private airSpeed: number = 270;
-  private jumpPower: number = 520;
-
   // Input states driven by controls or AI
   public moveLeftInput: boolean = false;
   public moveRightInput: boolean = false;
@@ -32,20 +29,25 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private aiActionTimer: number = 0;
   public cpuWantsAttack: boolean = false;
 
-  constructor(scene: Phaser.Scene, x: number, y: number, texture: string, fighterType: FighterType = 'player') {
-    super(scene, x, y, texture);
+  constructor(scene: Phaser.Scene, x: number, y: number, charData: CharacterData, fighterType: FighterType = 'player') {
+    super(scene, x, y, charData.texture);
     this.fighterType = fighterType;
+    this.charData = charData;
     this.isCPU = fighterType === 'cpu';
 
     scene.add.existing(this);
     scene.physics.add.existing(this);
 
-    // Dynamic body setup
+    // Set sprite dimensions & physics body size
+    this.setDisplaySize(64, 64);
+
     const body = this.body as Phaser.Physics.Arcade.Body;
-    body.setCollideWorldBounds(false); // Off-stage blast zones handle KO
+    body.setSize(48, 60);
+    body.setOffset(8, 4);
+    body.setCollideWorldBounds(false); // Blast zones handle KO
     body.setBounce(0);
-    body.setMaxVelocity(1200, 1400); // Allow intense smash knockback
-    body.setDragX(0); // Directly controlled by snappy velocity logic
+    body.setMaxVelocity(1400, 1600); // Allow high smash knockback
+    body.setDragX(0);
   }
 
   public updatePlayer(delta: number, playerTarget?: Player): void {
@@ -58,17 +60,17 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       return;
     }
 
-    // Handle Invincibility flash
+    // Invincibility flashing
     if (this.isInvincible) {
       this.invincibleTimer -= delta;
-      this.setAlpha(Math.floor(Date.now() / 100) % 2 === 0 ? 0.3 : 0.85);
+      this.setAlpha(Math.floor(Date.now() / 90) % 2 === 0 ? 0.35 : 0.9);
       if (this.invincibleTimer <= 0) {
         this.isInvincible = false;
         this.setAlpha(1.0);
       }
     }
 
-    // Handle Hitstun status (cannot move or attack while hitstunned)
+    // Hitstun status
     if (this.isHitstunned) {
       this.hitstunTimer -= delta;
       this.setTint(0xff3333);
@@ -85,22 +87,24 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       this.canDoubleJump = true;
     }
 
-    // Execute CPU AI Logic if CPU
+    // CPU AI
     if (this.isCPU && playerTarget) {
       this.updateCPUAI(delta, playerTarget, isGrounded);
     }
 
-    // Snappy Horizontal Movement: Direct Velocity Control
+    // Character-specific speeds
+    const runSpeed = this.charData.stats.speed;
+    const airSpeed = this.charData.stats.airSpeed;
+
     if (this.moveLeftInput && !this.moveRightInput) {
-      const speed = isGrounded ? this.runSpeed : this.airSpeed;
+      const speed = isGrounded ? runSpeed : airSpeed;
       body.setVelocityX(-speed);
       this.setFlipX(true);
     } else if (this.moveRightInput && !this.moveLeftInput) {
-      const speed = isGrounded ? this.runSpeed : this.airSpeed;
+      const speed = isGrounded ? runSpeed : airSpeed;
       body.setVelocityX(speed);
       this.setFlipX(false);
     } else {
-      // Immediate responsive stop on ground, smooth inertia decay in air
       if (isGrounded) {
         body.setVelocityX(0);
       } else {
@@ -115,13 +119,14 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     if (!body) return false;
 
     const isGrounded = body.blocked.down || body.touching.down;
+    const jumpPower = this.charData.stats.jumpPower;
 
     if (isGrounded) {
-      body.setVelocityY(-this.jumpPower);
+      body.setVelocityY(-jumpPower);
       return true;
     } else if (this.canDoubleJump) {
       this.canDoubleJump = false;
-      body.setVelocityY(-this.jumpPower * 0.92);
+      body.setVelocityY(-jumpPower * 0.92);
       return true;
     }
     return false;
@@ -132,9 +137,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
     this.damagePercent += damage;
 
-    // Smash Bros style knockback formula: scaling exponent with damage percent
     const scaling = 1 + Math.pow(this.damagePercent / 55, 1.3);
-    const weightRatio = 100 / Math.max(10, this.weight);
+    const weightRatio = 100 / Math.max(10, this.charData.stats.weight);
 
     const finalVx = vectorX * scaling * weightRatio;
     const finalVy = vectorY * scaling * weightRatio;
@@ -142,7 +146,6 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     const body = this.body as Phaser.Physics.Arcade.Body;
     body.setVelocity(finalVx, finalVy);
 
-    // Apply hitstun proportional to damage/knockback magnitude
     const speed = Math.sqrt(finalVx * finalVx + finalVy * finalVy);
     this.isHitstunned = true;
     this.hitstunTimer = Math.min(850, 140 + speed * 0.45);
@@ -158,15 +161,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.moveLeftInput = false;
     this.moveRightInput = false;
 
-    // Grant 2.5 seconds invincibility
     this.isInvincible = true;
     this.invincibleTimer = 2500;
   }
 
-  /**
-   * CPU AI logic for 960px wide Battlefield stage.
-   * Main Stage is centered at X=480, Width=580 (Left edge=190, Right edge=770, Y=450).
-   */
   private updateCPUAI(delta: number, target: Player, isGrounded: boolean): void {
     this.aiActionTimer -= delta;
     this.cpuWantsAttack = false;
@@ -176,7 +174,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     const absDistX = Math.abs(distX);
     const absDistY = Math.abs(distY);
 
-    // 1. Off-stage Recovery Priority (Main stage is X=190..770, Y=450)
+    // Off-stage Recovery
     if (this.x < 190 || this.x > 770 || this.y > 480) {
       if (this.x < 480) {
         this.moveLeftInput = false;
@@ -193,11 +191,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       return;
     }
 
-    // 2. Combat Tactics & Attack Trigger
     if (this.aiActionTimer <= 0) {
-      this.aiActionTimer = Phaser.Math.Between(100, 240); // Fast reaction speed
+      this.aiActionTimer = Phaser.Math.Between(100, 240);
 
-      // Move towards player
       if (absDistX > 55) {
         this.moveLeftInput = distX < 0;
         this.moveRightInput = distX > 0;
@@ -206,12 +202,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
         this.moveRightInput = false;
       }
 
-      // Attack if in melee range
       if (absDistX < 70 && absDistY < 65) {
         this.cpuWantsAttack = true;
       }
 
-      // Jump if target is on higher platforms
       if (distY < -80 && isGrounded && Phaser.Math.Between(0, 100) < 65) {
         this.jump();
       }
