@@ -44,8 +44,30 @@ export class CharSelectScene extends Phaser.Scene {
     this.add.circle(180, 300, 200, 0x38bdf8, 0.05);
     this.add.circle(780, 300, 200, 0xf43f5e, 0.05);
 
+    // Back to Title Button (Top-left)
+    const backBtn = this.add.container(75, 35);
+    const backBg = this.add.rectangle(0, 0, 100, 34, 0x1e293b, 0.9).setStrokeStyle(1.5, 0x475569);
+    const backTxt = this.add.text(0, 0, '◀ タイトル', {
+      fontSize: '13px',
+      color: '#cbd5e1',
+      fontStyle: 'bold'
+    }).setOrigin(0.5);
+    backBtn.add([backBg, backTxt]);
+    backBg.setInteractive({ useHandCursor: true });
+    backBg.on('pointerover', () => {
+      backBg.setFillStyle(0x334155);
+      backBtn.setScale(1.05);
+    });
+    backBg.on('pointerout', () => {
+      backBg.setFillStyle(0x1e293b);
+      backBtn.setScale(1.0);
+    });
+    backBg.on('pointerdown', () => {
+      this.scene.start('TitleScene');
+    });
+
     this.add.text(width / 2, 35, '⚔️ CHARACTER SELECT ⚔️', {
-      fontSize: '32px',
+      fontSize: '30px',
       color: '#f8fafc',
       fontStyle: 'bold',
       stroke: '#0f172a',

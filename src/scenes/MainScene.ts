@@ -435,7 +435,7 @@ export class MainScene extends Phaser.Scene {
 
     this.gameOverContainer = this.add.container(480, 300);
 
-    const bg = this.add.rectangle(0, 0, 520, 260, 0x0a0f1d, 0.96);
+    const bg = this.add.rectangle(0, 0, 560, 260, 0x0a0f1d, 0.96);
     bg.setStrokeStyle(3, 0x38bdf8);
 
     const title = this.add.text(0, -60, winnerText, {
@@ -449,23 +449,11 @@ export class MainScene extends Phaser.Scene {
       color: '#94a3b8'
     }).setOrigin(0.5);
 
-    const charBtn = this.add.text(-120, 65, '🔄 キャラ変更', {
-      fontSize: '18px',
-      color: '#ffffff',
-      backgroundColor: '#334155',
-      padding: { x: 18, y: 10 },
-      fontStyle: 'bold'
-    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
-
-    charBtn.on('pointerdown', () => {
-      this.scene.start('CharSelectScene');
-    });
-
-    const retryBtn = this.add.text(120, 65, '⚔️ 再戦する', {
-      fontSize: '18px',
+    const retryBtn = this.add.text(-170, 65, '⚔️ 再戦する', {
+      fontSize: '16px',
       color: '#ffffff',
       backgroundColor: '#2563eb',
-      padding: { x: 22, y: 10 },
+      padding: { x: 16, y: 10 },
       fontStyle: 'bold'
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
 
@@ -473,7 +461,31 @@ export class MainScene extends Phaser.Scene {
       this.scene.restart();
     });
 
-    this.gameOverContainer.add([bg, title, sub, charBtn, retryBtn]);
+    const charBtn = this.add.text(0, 65, '🔄 キャラ変更', {
+      fontSize: '16px',
+      color: '#ffffff',
+      backgroundColor: '#334155',
+      padding: { x: 16, y: 10 },
+      fontStyle: 'bold'
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+
+    charBtn.on('pointerdown', () => {
+      this.scene.start('CharSelectScene');
+    });
+
+    const titleBtn = this.add.text(170, 65, '🏠 タイトルへ', {
+      fontSize: '16px',
+      color: '#ffffff',
+      backgroundColor: '#475569',
+      padding: { x: 16, y: 10 },
+      fontStyle: 'bold'
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+
+    titleBtn.on('pointerdown', () => {
+      this.scene.start('TitleScene');
+    });
+
+    this.gameOverContainer.add([bg, title, sub, retryBtn, charBtn, titleBtn]);
   }
 
   private createVirtualControls(): void {
