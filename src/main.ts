@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { TitleScene } from './scenes/TitleScene';
 import { CharSelectScene } from './scenes/CharSelectScene';
 import { StageSelectScene } from './scenes/StageSelectScene';
 import { MainScene } from './scenes/MainScene';
@@ -21,7 +22,7 @@ const config: Phaser.Types.Core.GameConfig = {
       debug: false
     }
   },
-  scene: [CharSelectScene, StageSelectScene, MainScene]
+  scene: [TitleScene, CharSelectScene, StageSelectScene, MainScene]
 };
 
 new Phaser.Game(config);

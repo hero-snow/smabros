@@ -5,7 +5,7 @@
 
   color-scheme: dark;
   color: #f0f4f8;
-  background-color: #0f172a;
+  background-color: #090d16;
 }
 
 * {
@@ -19,7 +19,7 @@ body {
   display: flex;
   justify-content: center;
   align-items: center;
-  background: radial-gradient(circle at center, #1e293b 0%, #0f172a 100%);
+  background: radial-gradient(circle at center, #172033 0%, #080c14 100%);
   overflow: hidden;
   user-select: none;
   -webkit-user-select: none;
@@ -29,21 +29,12 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
-}
-
-.game-header h1 {
-  font-size: 1.8rem;
-  background: linear-gradient(135deg, #38bdf8 0%, #818cf8 50%, #c084fc 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  text-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-  letter-spacing: 1px;
+  justify-content: center;
 }
 
 #app {
   border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6), 0 0 0 2px rgba(255, 255, 255, 0.1);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7), 0 0 0 2px rgba(255, 255, 255, 0.08);
   background-color: #000;
 }
