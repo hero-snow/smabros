@@ -28,15 +28,36 @@ export class CharSelectScene extends Phaser.Scene {
     super({ key: 'CharSelectScene' });
   }
 
+  init(data?: { p1Char?: CharacterData; cpuChar?: CharacterData }): void {
+    if (data?.p1Char) {
+      this.p1SelectedChar = data.p1Char;
+    }
+    if (data?.cpuChar) {
+      this.cpuSelectedChar = data.cpuChar;
+    }
+    this.selectingFor = 'P1';
+    this.gridContainers = [];
+    this.p1StatBars = {};
+    this.cpuStatBars = {};
+  }
+
   preload(): void {
     CHARACTERS.forEach(char => {
-      this.load.image(char.texture, `assets/${char.id}.png`);
-      this.load.image(char.portrait, `assets/${char.id}_portrait.png`);
+      if (!this.textures.exists(char.texture)) {
+        this.load.image(char.texture, `assets/${char.id}.png`);
+      }
+      if (!this.textures.exists(char.portrait)) {
+        this.load.image(char.portrait, `assets/${char.id}_portrait.png`);
+      }
     });
   }
 
   create(): void {
     const { width, height } = this.scale;
+
+    this.gridContainers = [];
+    this.p1StatBars = {};
+    this.cpuStatBars = {};
 
     this.cameras.main.setBackgroundColor('#060812');
     this.add.grid(width / 2, height / 2, width, height, 40, 40, 0x1e293b, 0.2, 0x334155, 0.4);
@@ -134,8 +155,8 @@ export class CharSelectScene extends Phaser.Scene {
       });
 
       bg.on('pointerout', () => {
-        this.updateCardStrokes();
         container.setScale(1.0);
+        this.updateCardStrokes();
       });
 
       bg.on('pointerdown', () => {
@@ -294,13 +315,32 @@ export class CharSelectScene extends Phaser.Scene {
     const startX = centerX - ((cols * itemW + (cols - 1) * gapX) / 2) + itemW / 2;
     const startY = centerY - (itemH + gapY) / 2 + itemH / 2;
 
-    if (p1Idx >= 0) {
+    CHARACTERS.forEach((char, idx) => {
+      if (idx < this.gridContainers.length) {
+        const container = this.gridContainers[idx];
+        const bg = container.list[0] as Phaser.GameObjects.Rectangle;
+        const isP1 = char.id === this.p1SelectedChar.id;
+        const isCpu = char.id === this.cpuSelectedChar.id;
+
+        if (isP1 && isCpu) {
+          bg.setStrokeStyle(3, 0xa855f7);
+        } else if (isP1) {
+          bg.setStrokeStyle(3, 0x38bdf8);
+        } else if (isCpu) {
+          bg.setStrokeStyle(3, 0xf43f5e);
+        } else {
+          bg.setStrokeStyle(2, 0x334155);
+        }
+      }
+    });
+
+    if (p1Idx >= 0 && this.p1Badge) {
       const p1X = startX + (p1Idx % cols) * (itemW + gapX);
       const p1Y = startY + Math.floor(p1Idx / cols) * (itemH + gapY) - 48;
       this.p1Badge.setPosition(p1X, p1Y);
     }
 
-    if (cpuIdx >= 0) {
+    if (cpuIdx >= 0 && this.cpuBadge) {
       const cpuX = startX + (cpuIdx % cols) * (itemW + gapX);
       const cpuY = startY + Math.floor(cpuIdx / cols) * (itemH + gapY) - 48;
       this.cpuBadge.setPosition(cpuX + 28, cpuY);
@@ -308,6 +348,7 @@ export class CharSelectScene extends Phaser.Scene {
   }
 
   private updateStatBars(bars: { [key: string]: Phaser.GameObjects.Rectangle }, char: CharacterData): void {
+    if (!bars['speed'] || !bars['jumpPower'] || !bars['attackPower'] || !bars['weight']) return;
     bars['speed'].width = Phaser.Math.Clamp((char.stats.speed - 220) / 200 * 105, 15, 105);
     bars['jumpPower'].width = Phaser.Math.Clamp((char.stats.jumpPower - 440) / 180 * 105, 15, 105);
     bars['attackPower'].width = Phaser.Math.Clamp((char.stats.attackPower - 0.8) / 0.6 * 105, 15, 105);

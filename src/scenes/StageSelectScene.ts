@@ -19,13 +19,22 @@ export class StageSelectScene extends Phaser.Scene {
     super({ key: 'StageSelectScene' });
   }
 
-  init(data: { p1Char: CharacterData; cpuChar: CharacterData }): void {
-    this.p1Char = data.p1Char;
-    this.cpuChar = data.cpuChar;
+  init(data?: { p1Char?: CharacterData; cpuChar?: CharacterData }): void {
+    if (data?.p1Char) {
+      this.p1Char = data.p1Char;
+    }
+    if (data?.cpuChar) {
+      this.cpuChar = data.cpuChar;
+    }
+    this.stageCards = [];
+    this.previewSoftPlatforms = [];
   }
 
   create(): void {
     const { width, height } = this.scale;
+
+    this.stageCards = [];
+    this.previewSoftPlatforms = [];
 
     this.cameras.main.setBackgroundColor('#060812');
     this.add.grid(width / 2, height / 2, width, height, 40, 40, 0x1e293b, 0.25, 0x334155, 0.45);
@@ -173,13 +182,15 @@ export class StageSelectScene extends Phaser.Scene {
     // Update border highlights on left grid cards
     STAGES.forEach((s, idx) => {
       const card = this.stageCards[idx];
-      const bg = card.list[0] as Phaser.GameObjects.Rectangle;
-      if (s.id === stage.id) {
-        bg.setStrokeStyle(4, 0xfacc15);
-        card.setScale(1.03);
-      } else {
-        bg.setStrokeStyle(2, s.themeColor);
-        card.setScale(1.0);
+      if (card) {
+        const bg = card.list[0] as Phaser.GameObjects.Rectangle;
+        if (s.id === stage.id) {
+          bg.setStrokeStyle(4, 0xfacc15);
+          card.setScale(1.03);
+        } else {
+          bg.setStrokeStyle(2, s.themeColor);
+          card.setScale(1.0);
+        }
       }
     });
   }
@@ -191,7 +202,12 @@ export class StageSelectScene extends Phaser.Scene {
     const backTxt = this.add.text(0, 0, '◀ キャラ選択へ', { fontSize: '16px', color: '#ffffff', fontStyle: 'bold' }).setOrigin(0.5);
     backBtn.add([backBg, backTxt]);
     backBg.setInteractive({ useHandCursor: true });
-    backBg.on('pointerdown', () => this.scene.start('CharSelectScene'));
+    backBg.on('pointerdown', () => {
+      this.scene.start('CharSelectScene', {
+        p1Char: this.p1Char,
+        cpuChar: this.cpuChar
+      });
+    });
 
     // Start Battle Button
     const startBtn = this.add.container(centerX + 120, y);
