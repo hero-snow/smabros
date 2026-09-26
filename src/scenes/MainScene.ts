@@ -53,17 +53,31 @@ export class MainScene extends Phaser.Scene {
     super({ key: 'MainScene' });
   }
 
-  init(data: { p1Char?: CharacterData; cpuChar?: CharacterData; stage?: StageData }): void {
-    if (data.p1Char) this.p1CharData = data.p1Char;
-    if (data.cpuChar) this.cpuCharData = data.cpuChar;
-    if (data.stage) this.stageData = data.stage;
+  init(data?: { p1Char?: CharacterData; cpuChar?: CharacterData; stage?: StageData }): void {
+    if (data?.p1Char) this.p1CharData = data.p1Char;
+    if (data?.cpuChar) this.cpuCharData = data.cpuChar;
+    if (data?.stage) this.stageData = data.stage;
+
+    this.gameState = 'COUNTDOWN';
+    this.playerAttacking = false;
+    this.cpuAttacking = false;
+    this.softPlatformObjects = [];
+    this.softPlatformDataList = [];
   }
 
   preload(): void {
-    this.load.image(this.p1CharData.texture, `assets/${this.p1CharData.id}.png`);
-    this.load.image(this.cpuCharData.texture, `assets/${this.cpuCharData.id}.png`);
-    this.load.image(this.p1CharData.portrait, `assets/${this.p1CharData.id}_portrait.png`);
-    this.load.image(this.cpuCharData.portrait, `assets/${this.cpuCharData.id}_portrait.png`);
+    if (!this.textures.exists(this.p1CharData.texture)) {
+      this.load.image(this.p1CharData.texture, `assets/${this.p1CharData.id}.png`);
+    }
+    if (!this.textures.exists(this.cpuCharData.texture)) {
+      this.load.image(this.cpuCharData.texture, `assets/${this.cpuCharData.id}.png`);
+    }
+    if (!this.textures.exists(this.p1CharData.portrait)) {
+      this.load.image(this.p1CharData.portrait, `assets/${this.p1CharData.id}_portrait.png`);
+    }
+    if (!this.textures.exists(this.cpuCharData.portrait)) {
+      this.load.image(this.cpuCharData.portrait, `assets/${this.cpuCharData.id}_portrait.png`);
+    }
   }
 
   create(): void {
@@ -470,7 +484,10 @@ export class MainScene extends Phaser.Scene {
     }).setOrigin(0.5).setInteractive({ useHandCursor: true });
 
     charBtn.on('pointerdown', () => {
-      this.scene.start('CharSelectScene');
+      this.scene.start('CharSelectScene', {
+        p1Char: this.p1CharData,
+        cpuChar: this.cpuCharData
+      });
     });
 
     const titleBtn = this.add.text(170, 65, '🏠 タイトルへ', {
